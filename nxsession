@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # original name:nxsession
 # Simple script to create/resume a remote NX session and connect to it.
@@ -13,11 +13,11 @@
 # 2. bash, fuser, awk, xauth, hexdump on the (remote) client, bash on the (local) server
 #
 # freeNX or any NX client is NOT needed.
-# 
+#
 # In the simplest case just run (on the local server):
 #   nxsession :<x port> -h <host>
 # (if -h is omitted a local session is created/resumed, you later connect to that session through another server)
-# 
+#
 # If -h is present, you'll be requested to log in the remote (client) machine via SSH.
 # An NX session is automatically created/resumed on the client. When the session is created .nxstartup is execute
 # to start default X applications. When the last X application has ended the remote NX session ends automatically.
@@ -36,12 +36,14 @@
 # Author: Lars Hofhansl
 #
 
-SCRIPT=`basename $0`
-
 function usage() {
-	echo "$0 port [-h host] [-ssh ssh-options] [-s] [-f]  |  $0 port -C [-f] [-t]"
+	echo "$0 port [-h host] [-ssh ssh-options] [-s] [-f]
+$0 port -C [-f] [-t]"
 	exit 1
 }
+
+set -ueo pipefail
+set -x
 
 umask 0077 # make sure created files are not world/group read/writeable
 
@@ -69,79 +71,75 @@ while [ "${1+defined}" ]; do
 		FORCE=$1
 		;;
 	-t)
-		TERMINATE=$1
+		TERMINATE=1
 		;;
 	*)
-		if [ -n "$X_DISPLAY" ]; then
-		usage
-		fi
 		X_DISPLAY=$1
-		NX_PORT=$(($X_DISPLAY+4000))
-		X_PORT=$(($X_DISPLAY+6000))
 		;;
 	esac
 	shift
 done
-if [ -z $X_DISPLAY ]; then
+if [ -z ${X_DISPLAY:-} ]; then
 	usage
 fi
+NX_PORT=$(($X_DISPLAY+4000))
+X_PORT=$(($X_DISPLAY+6000))
 
-if [ -n "$CLIENT" ]; then
+if [ -n "${CLIENT:-}" ]; then
 	# This runs remotely, invoked from the terminal side to start
-	# or resume an X session using nxagent as the X11 server 
+	# or resume an X session using nxagent as the X11 server
 
-	if [ -n "$SUSPEND" -o -n "$SSH" -o -n "$HOST" ]; then
+	if [ -n "${SUSPEND:-}" -o -n "${SSH:-}" -o -n "${HOST:-}" ]; then
 		usage
 	fi
 
 	NX_BASE=$HOME/.nx/C-$X_DISPLAY
 	unset DISPLAY
 
-	pid=`cat $NX_BASE/pid 2>/dev/null`
+	pid=$(cat $NX_BASE/pid 2>/dev/null || echo 0000)
 	if grep -q nxagent /proc/$pid/cmdline 2>/dev/null; then
 		# Agent is running
 		if fuser -s $NX_PORT/tcp; then
-		# and is active
-		if [ -z $FORCE ]; then
-			echo "Another session is active, use -f to force suspension of that session"
-			exit 1
+			# and is active
+			if [ -z ${FORCE:-} ]; then
+				echo "Another session is active, use -f to force suspension of that session"
+				exit 1
+			fi
+			# kill existing session if necessary
+			kill -HUP $pid # suspend agent
+			sleep 2
+			# kill the watchdog - if necessary
+			kill -HUP `ps --ppid $pid -o pid h` 2>/dev/null
+			sleep 1
 		fi
-		# kill existing session if necessary
-		kill -HUP $pid # suspend agent
-		sleep 1
-		# kill the watchdog - if necessary
-		kill -HUP `ps --ppid $pid -o pid h` 2>/dev/null
-		sleep 1
-		fi
-		if [ -z $TERMINATE ]; then
-		# Agent is inactive... Resume
-		COOKIE=`xauth nextract - :$X_DISPLAY | awk '{print $9}'`
-		echo "nodelay=1,cleanup=0,accept=127.0.0.1,taint=1,cookie=$COOKIE,$NX_OPTS" > $NX_BASE/options
-		kill -HUP $pid
+		if [ -z ${TERMINATE:-} ]; then
+			# Agent is inactive... Resume
+			COOKIE=`xauth nextract - :$X_DISPLAY | awk '{print $9}'`
+			echo "nodelay=1,cleanup=0,accept=127.0.0.1,taint=1,cookie=$COOKIE,${NX_OPTS:-}" > $NX_BASE/options
+			kill -HUP $pid
 		else
-		# we guaranteed that the session is suspended, it is safe to kill it
-		# TERM should do it.. use -9 just in case
-		kill -TERM $pid || kill -9 $pid
-		xauth remove ":$X_DISPLAY"
-		echo "Terminated :$X_DISPLAY"
-		exit 0
+			# we guaranteed that the session is suspended, it is safe to kill it
+			# TERM should do it.. use -9 just in case
+			kill -TERM $pid || kill -9 $pid
+			xauth remove ":$X_DISPLAY"
+			echo "Terminated :$X_DISPLAY"
+			exit 0
 		fi
 	else
 		# Start Agent
-
-		if [ -n "$TERMINATE" ]; then
-		echo "No Agent running?"
-		exit 1
-		fi	
+		if [ -n "${TERMINATE:-}" ]; then
+			echo "No Agent running?"
+			exit 1
+		fi
 
 		if fuser -s $NX_PORT/tcp; then
-		echo "Port $NX_PORT is in use"
-		exit 1
+			echo "Port $NX_PORT is in use"
+			exit 1
 		fi
 
 		if fuser -s $X_PORT/tcp; then
-		echo "Display :$X_DISPLAY is in use"
-		exit 1
+			echo "Display :$X_DISPLAY is in use"
+			exit 1
 		fi
 
 		# clear out existing Dir
@@ -149,16 +147,17 @@ if [ -n "$CLIENT" ]; then
 		mkdir -p $NX_BASE
 
 		# secure the remote X session (generate MIT-MAGIC-COOKIE)
-		COOKIE=`head -c 16 /dev/urandom  | hexdump -e '1/1 "%02x"'`
+		#COOKIE=`head -c 16 /dev/urandom  | hexdump -e '1/1 "%02x"'`
+		COOKIE=$(mcookie)
 		xauth add :$X_DISPLAY . $COOKIE
 
 		# run agent
 		echo "nodelay=1,cleanup=0,accept=127.0.0.1,taint=1,cookie=$COOKIE,$NX_OPTS" > $NX_BASE/options
 		nxagent -display nx/nx,options=$NX_BASE/options:$X_DISPLAY :$X_DISPLAY -R -nolisten tcp -persistent -reset -dpi 96 -forcenx -class TrueColor -auth $HOME/.Xauthority &> $NX_BASE/session &
-		echo $! > $NX_BASE/pid 
+		echo $! > $NX_BASE/pid
 		# wait until nxagent is ready
 		while ! fuser -s $NX_PORT/tcp; do
-		sleep 1
+			sleep 1
 		done
 		# run startup script
 		env DISPLAY=:$X_DISPLAY $HOME/.nxstartup &> $NX_BASE/x_session &
@@ -171,14 +170,14 @@ else
 
 	## LOCAL ##
 
-	if [ -n "$TERMINATE" ]; then
+	if [ -n "${TERMINATE:-}" ]; then
 		usage
 	fi
 
 	NX_BASE=$HOME/.nx/S-$X_DISPLAY
 
-	pid=`cat $NX_BASE/pid 2>/dev/null`
-	if [ -n "$SUSPEND" ]; then
+	pid=$(cat $NX_BASE/pid 2>/dev/null || echo 0000)
+	if [ -n "${SUSPEND:-}" ]; then
 		if kill -HUP $pid 2>/dev/null; then
 		echo "Suspending Session"
 		else
@@ -187,13 +186,13 @@ else
 		exit 0
 	fi
 
-	if [ -z "$HOST" ]; then
+	if [ -z "${HOST:-}" ]; then
 		echo "Starting/Resuming LOCAL session"
-		RESULT=$($0 $X_DISPLAY -o link=lan -C $FORCE | head -n1)
+		RESULT=$($0 $X_DISPLAY -o link=lan -C ${FORCE:-} | head -n1)
 	else
 		echo "Starting/Resuming session on $HOST"
 		# | head -n1 waits for the first line from the remote machine
-		RESULT=$(ssh -T -f -o ExitOnForwardFailure=yes -L$NX_PORT:localhost:$NX_PORT $HOST $SSH_OPTS "$SCRIPT $X_DISPLAY -o link=wan -C $FORCE" | head -n1)
+		RESULT=$(ssh -T -f -o ExitOnForwardFailure=yes -L$NX_PORT:localhost:$NX_PORT $HOST ${SSH_OPTS:-} "nxsession $X_DISPLAY -o link=wan -C ${FORCE:-}" | head -n1)
 	fi
 
 	if [ "${RESULT:0:6}" != "Cookie" ]; then
