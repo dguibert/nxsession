@@ -46,6 +46,7 @@ set -ueo pipefail
 set -x
 
 umask 0077 # make sure created files are not world/group read/writeable
+export PATH=@nxlibs@/bin:@xauth@/bin:@psmisc@/bin:$PATH
 
 while [ "${1+defined}" ]; do
 	case $1 in
