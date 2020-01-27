@@ -153,7 +153,7 @@ if [ -n "${CLIENT:-}" ]; then
 		xauth add :$X_DISPLAY . $COOKIE
 
 		# run agent
-		echo "nodelay=1,cleanup=0,accept=127.0.0.1,taint=1,cookie=$COOKIE,$NX_OPTS" > $NX_BASE/options
+		echo "nodelay=1,cleanup=0,accept=127.0.0.1,taint=1,cookie=$COOKIE,${NX_OPTS:-}" > $NX_BASE/options
 		nxagent -display nx/nx,options=$NX_BASE/options:$X_DISPLAY :$X_DISPLAY -R -nolisten tcp -persistent -reset -dpi 96 -forcenx -class TrueColor -auth $HOME/.Xauthority &> $NX_BASE/session &
 		echo $! > $NX_BASE/pid
 		# wait until nxagent is ready
