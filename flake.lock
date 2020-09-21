@@ -1,11 +1,26 @@
 {
-    "inputs": {
-        "nixpkgs": {
-            "inputs": {},
-            "narHash": "sha256-NB+H7zK3BB//zM127FqgbG4iAfY+nS/IOyO+uGWA5Ho=",
-            "originalUrl": "nixpkgs",
-            "url": "github:edolstra/nixpkgs/7845bf5f4b3013df1cf036e9c9c3a55a30331db9"
-        }
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1600595405,
+        "narHash": "sha256-/ZspunYeuWEwoqcCKw1AIB6t7I2GYG43ZBHxt1aNp/8=",
+        "ref": "pu",
+        "rev": "635e2c1c7998e7ab912abc8e1afa0473f313b3bb",
+        "revCount": 244103,
+        "type": "git",
+        "url": "file:///home/dguibert/code/nixpkgs"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      }
     },
-    "version": 3
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
 }
