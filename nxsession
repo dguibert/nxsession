@@ -75,7 +75,7 @@ while [ "${1+defined}" ]; do
                 TERMINATE=1
                 ;;
         -p)
-                PULSE_COOKIE=$2
+                PULSE_COOKIE_HEX=$2
                 shift
                 ;;
         *)
@@ -90,7 +90,7 @@ fi
 NX_PORT=$(($X_DISPLAY+4000))
 X_PORT=$(($X_DISPLAY+6000))
 PULSE_PORT=$(($X_DISPLAY+6001))
-PULSE_COOKIE=${PULSE_COOKIE:-$(xxd -p $HOME/.config/pulse/cookie 2>/dev/null | tr '\n' '-' || echo "")}
+PULSE_COOKIE_HEX=${PULSE_COOKIE_HEX:-$(xxd -p $HOME/.config/pulse/cookie 2>/dev/null | tr '\n' '-' || echo "")}
 sshOptions=()
 
 if [ -n "${CLIENT:-}" ]; then
@@ -169,7 +169,7 @@ if [ -n "${CLIENT:-}" ]; then
                 done
                 # run startup script
                 env DISPLAY=:$X_DISPLAY $HOME/.nxstartup &> $NX_BASE/x_session &
-                echo "${PULSE_COOKIE}" | tr '-' \\n | xxd -r -p > $NX_BASE/pulse_cookie
+                echo "${PULSE_COOKIE_HEX}" | tr '-' \\n | xxd -r -p > $NX_BASE/pulse_cookie
 
                 echo > $NX_BASE/env
                 echo "export PULSE_SERVER=tcp:localhost:$PULSE_PORT" >> $NX_BASE/env
@@ -209,13 +209,13 @@ else
                   -o ExitOnForwardFailure=yes
                   -L$NX_PORT:localhost:$NX_PORT
                 )
-                if [ -n "$PULSE_COOKIE" ]; then
+                if [ -n "$PULSE_COOKIE_HEX" ]; then
                   sshOptions+=(
                     -R$PULSE_PORT:localhost:4713
                   )
                 fi
                 # | head -n1 waits for the first line from the remote machine
-                RESULT=$(ssh -T -f ${sshOptions[@]} $HOST ${SSH_OPTS:-} "nxsession $X_DISPLAY -o link=wan -C ${FORCE:-} -p \"${PULSE_COOKIE:-}\"" | head -n1)
+                RESULT=$(ssh -T -f ${sshOptions[@]} $HOST ${SSH_OPTS:-} "nxsession $X_DISPLAY -o link=wan -C ${FORCE:-} -p \"${PULSE_COOKIE_HEX:-}\"" | head -n1)
         fi
 
         if [ "${RESULT:0:6}" != "Cookie" ]; then
